@@ -1,6 +1,7 @@
 package com.meshnet.app.data
 
 import android.content.Context
+import androidx.core.content.edit
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.meshnet.app.models.MessagePriority
@@ -27,14 +28,14 @@ class WalletManager(context: Context) {
         if (current < amount) return false
         
         val newBalance = current - amount
-        prefs.edit().putFloat(KEY_BALANCE, newBalance).apply()
+        prefs.edit { putFloat(KEY_BALANCE, newBalance) }
         addTransactionLog("-$amount MB: $reason")
         return true
     }
 
     fun addCredits(amount: Float, reason: String) {
         val newBalance = getBalance() + amount
-        prefs.edit().putFloat(KEY_BALANCE, newBalance).apply()
+        prefs.edit { putFloat(KEY_BALANCE, newBalance) }
         addTransactionLog("+$amount MB: $reason")
     }
 
@@ -62,6 +63,6 @@ class WalletManager(context: Context) {
         val logs = getTransactionLog().toMutableList()
         logs.add(0, "${System.currentTimeMillis()}: $entry")
         if (logs.size > 50) logs.removeAt(50)
-        prefs.edit().putString(KEY_TRANSACTIONS, gson.toJson(logs)).apply()
+        prefs.edit { putString(KEY_TRANSACTIONS, gson.toJson(logs)) }
     }
 }

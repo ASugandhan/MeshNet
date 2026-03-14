@@ -9,6 +9,7 @@ import com.meshnet.app.models.MessagePriority
  */
 data class NearbyPeer(
     val endpointId: String,        // Nearby Connections endpoint ID
+    val meshNetId: String,         // RSA-2048 Hash ID (the "Hash")
     val deviceName: String,        // Human readable name
     val batteryLevel: Int,         // 0-100
     val isMovingTowardSignal: Boolean, // true = heading toward city/signal

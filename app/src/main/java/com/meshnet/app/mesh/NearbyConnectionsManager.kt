@@ -9,19 +9,21 @@ import java.nio.charset.StandardCharsets
 
 /**
  * Handles Google Nearby Connections API for peer-to-peer mesh networking.
- * Implementation of Section 5 in the Implementation Guide.
  */
 class NearbyConnectionsManager(private val context: Context) {
 
     private val connectionsClient: ConnectionsClient = Nearby.getConnectionsClient(context)
     private val gson = Gson()
     
-    val connectedPeers = mutableMapOf<String, String>() // endpointId -> deviceName
+    val connectedPeers = mutableMapOf<String, String>() // endpointId -> Name|Hash
+    val pendingConnections = mutableSetOf<String>()
     
-    private var onPacketReceivedCallback: ((String) -> Unit)? = null
-    private var onPeerFoundCallback: ((String, String) -> Unit)? = null
-    private var onConnectedCallback: ((String) -> Unit)? = null
-    private var onDisconnectedCallback: ((String) -> Unit)? = null
+    private var localDiscoveryName: String = "MeshNetUser"
+    
+    var onPacketReceivedCallback: ((String) -> Unit)? = null
+    var onPeerFoundCallback: ((String, String) -> Unit)? = null
+    var onConnectedCallback: ((String) -> Unit)? = null
+    var onDisconnectedCallback: ((String) -> Unit)? = null
 
     companion object {
         private const val SERVICE_ID = "com.meshnet.app.mesh"
@@ -35,20 +37,17 @@ class NearbyConnectionsManager(private val context: Context) {
                 onPacketReceivedCallback?.invoke(json)
             }
         }
-
-        override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
-            // Can be used to track progress of large packets
-        }
+        override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {}
     }
 
     private val connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
         override fun onConnectionInitiated(endpointId: String, info: ConnectionInfo) {
-            // Automatically accept the connection in mesh mode
             connectionsClient.acceptConnection(endpointId, payloadCallback)
             connectedPeers[endpointId] = info.endpointName
         }
 
         override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
+            pendingConnections.remove(endpointId)
             if (result.status.isSuccess) {
                 onConnectedCallback?.invoke(endpointId)
             } else {
@@ -58,15 +57,17 @@ class NearbyConnectionsManager(private val context: Context) {
 
         override fun onDisconnected(endpointId: String) {
             connectedPeers.remove(endpointId)
+            pendingConnections.remove(endpointId)
             onDisconnectedCallback?.invoke(endpointId)
         }
     }
 
-    fun startAdvertising(deviceName: String, onPacketReceived: (String) -> Unit) {
+    fun startAdvertising(discoveryName: String, onPacketReceived: (String) -> Unit) {
+        this.localDiscoveryName = discoveryName
         this.onPacketReceivedCallback = onPacketReceived
         val options = AdvertisingOptions.Builder().setStrategy(STRATEGY).build()
         connectionsClient.startAdvertising(
-            deviceName,
+            discoveryName,
             SERVICE_ID,
             connectionLifecycleCallback,
             options
@@ -82,24 +83,18 @@ class NearbyConnectionsManager(private val context: Context) {
                 override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
                     onPeerFoundCallback?.invoke(endpointId, info.endpointName)
                 }
-
-                override fun onEndpointLost(endpointId: String) {
-                    // Handle lost peer if needed
-                }
+                override fun onEndpointLost(endpointId: String) {}
             },
             options
         )
     }
 
-    fun connectToPeer(
-        endpointId: String,
-        onConnected: (String) -> Unit,
-        onDisconnected: (String) -> Unit
-    ) {
-        this.onConnectedCallback = onConnected
-        this.onDisconnectedCallback = onDisconnected
+    fun connectToPeer(endpointId: String) {
+        if (connectedPeers.containsKey(endpointId) || pendingConnections.contains(endpointId)) return
+        
+        pendingConnections.add(endpointId)
         connectionsClient.requestConnection(
-            "MeshNetUser", // Local name for request
+            localDiscoveryName, // Send our Name|Hash to the peer
             endpointId,
             connectionLifecycleCallback
         )
@@ -116,15 +111,11 @@ class NearbyConnectionsManager(private val context: Context) {
         }
     }
 
-    fun disconnectFromPeer(endpointId: String) {
-        connectionsClient.disconnectFromEndpoint(endpointId)
-        connectedPeers.remove(endpointId)
-    }
-
     fun stopAll() {
         connectionsClient.stopAdvertising()
         connectionsClient.stopDiscovery()
         connectionsClient.stopAllEndpoints()
         connectedPeers.clear()
+        pendingConnections.clear()
     }
 }

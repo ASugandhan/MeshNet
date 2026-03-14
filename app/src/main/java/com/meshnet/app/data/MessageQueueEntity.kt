@@ -12,7 +12,7 @@ data class MessageQueueEntity(
     @PrimaryKey val packetId: String,
     val originalSenderId: String,
     val destinationHash: String,
-    val priority: String, // Store as String (enum name)
+    val priority: String,
     val sprayLimit: Int,
     val sprayRemaining: Int,
     val hopCount: Int,
@@ -21,7 +21,7 @@ data class MessageQueueEntity(
     val expiresAt: Long,
     val encryptedPayload: String,
     val isSOSMessage: Boolean,
-    val status: String, // Store as String (enum name)
+    val status: String,
     val deliveredAt: Long?,
     val senderLatitude: Double?,
     val senderLongitude: Double?,
@@ -80,6 +80,9 @@ interface MessageQueueDao {
 
     @Query("SELECT * FROM message_queue WHERE status != 'DELIVERED' AND status != 'EXPIRED'")
     fun getAllPendingPackets(): Flow<List<MessageQueueEntity>>
+
+    @Query("SELECT * FROM message_queue WHERE isRelayPacket = 0 ORDER BY createdAt DESC")
+    fun getInboxMessages(): Flow<List<MessageQueueEntity>>
 
     @Query("SELECT * FROM message_queue WHERE packetId = :packetId")
     suspend fun getPacketById(packetId: String): MessageQueueEntity?
